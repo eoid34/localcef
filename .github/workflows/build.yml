@@ -1,99 +1,49 @@
 
-name: Build CEF App for Windows
+name: Build CEF App
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
     inputs:
-      cef_version:
-        description: 'CEF Version (e.g., 109.1.11+g465e3c0+chromium-109.0.5414.120)'
+      build_type:
+        description: 'Build type (Debug/Release)'
         required: true
-        default: '109.1.11+g465e3c0+chromium-109.0.5414.120'
+        default: 'Release'
+        type: choice
+        options:
+          - Debug
+          - Release
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v3
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Install CMake
-      uses: jwlawson/actions-setup-cmake@v2
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v1
       with:
         cmake-version: '3.20.x'
 
-    - name: Download and Extract CEF SDK
+    - name: Download CEF
       run: |
-        # 创建目录
-        mkdir cef_sdk
-        cd cef_sdk
-        
-        # 下载 CEF 二进制包 (Windows 64位 Standard)
-        $cef_version = "${{ github.event.inputs.cef_version }}"
-        $url = "https://cef-builds.spotifycdn.com/cef_binary_${cef_version}_windows64.tar.bz2"
-        Write-Host "Downloading CEF from: $url"
-        Invoke-WebRequest -Uri $url -OutFile "cef.tar.bz2"
-        
-        # 安装 7zip 用于解压
-        choco install 7zip -y
-        
-        # 解压 .tar.bz2 -> .tar
-        7z x cef.tar.bz2
-        # 解压 .tar -> 文件夹
-        7z x cef.tar
-        
-        # 获取解压后的文件夹名称 (通常以 cef_binary_ 开头)
-        $folderName = Get-ChildItem -Directory | Where-Object { $_.Name -like "cef_binary_*" } | Select-Object -First 1 -ExpandProperty Name
-        Write-Host "CEF SDK extracted to: $folderName"
-        
-        # 设置环境变量供后续步骤使用
-        echo "CEF_ROOT_PATH=$(Resolve-Path $folderName)" >> $env:GITHUB_ENV
+        # 下载CEF二进制文件 (示例版本，实际需根据需求调整)
+        Invoke-WebRequest -Uri "https://cef-builds.spotifycdn.com/cef_binary_109.1.11+g51392e7+chromium-109.0.5414.119_windows64_minimal.tar.bz2" -OutFile "cef.tar.bz2"
+        # 解压 (需要tar命令，Windows最新 runner 支持)
+        tar -xjf cef.tar.bz2
+        Rename-Item -Path "cef_binary_109.1.11+g51392e7+chromium-109.0.5414.119_windows64_minimal" -NewName "cef_binary"
 
     - name: Configure CMake
       run: |
-        mkdir build
-        cd build
-        # 配置 CMake，指定 CEF_ROOT
-        cmake .. -G "Visual Studio 17 2022" -A x64 -DCEF_ROOT="${{ env.CEF_ROOT_PATH }}"
+        cmake -B build -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type }} -DCEF_ROOT="${{ github.workspace }}/cef_binary"
 
-    - name: Build Project
+    - name: Build
       run: |
-        cd build
-        cmake --build . --config Release
-
-    - name: Prepare Distribution Package
-      run: |
-        # 创建发布文件夹
-        mkdir dist
-        # 复制生成的 exe
-        Copy-Item "build/Release/MyCefApp.exe" "dist/"
-        # 复制 CEF 资源文件 (dlls, paks, locales 等)
-        # CMake 的 COPY_CEF_RESOURCES 通常会将它们复制到 build/Release/Release (或 Debug) 子目录
-        # 我们需要确认具体路径，通常在 build/Release/Release 或 build/Release
-        if (Test-Path "build/Release/Release") {
-            Copy-Item "build/Release/Release/*" "dist/" -Recurse
-        } else {
-            Copy-Item "build/Release/*" "dist/" -Recurse -Exclude "*.obj", "*.ilk", "*.pdb", "*.exp", "*.lib"
-        }
-        
-        # 创建示例 www 目录和 index.html，以便用户测试
-        mkdir "dist/www"
-        @"
-        <!DOCTYPE html>
-        <html>
-        <head><title>CEF Custom Scheme Test</title></head>
-        <body>
-            <h1>Hello from Custom Scheme!</h1>
-            <p>This page was loaded via local://app/index.html</p>
-        </body>
-        </html>
-        "@ | Out-File -FilePath "dist/www/index.html" -Encoding utf8
+        cmake --build build --config ${{ github.event.inputs.build_type }}
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
-        name: MyCefApp-Windows-x64
-        path: dist/
+        name: CefLocalSchemeApp-${{ github.event.inputs.build_type }}
+        path: build/${{ github.event.inputs.build_type }}/*
