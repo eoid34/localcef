@@ -34,9 +34,19 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile cef.tar.bz2
           tar -xf cef.tar.bz2
           $dir = Get-ChildItem -Directory cef_binary_* | Select-Object -First 1
+          if (-not $dir) {
+            Write-Host "tar 解压未生成 cef_binary_* 目录，回退到 Python tarfile..."
+            python -c "import tarfile; tarfile.open('cef.tar.bz2').extractall('.')"
+            $dir = Get-ChildItem -Directory cef_binary_* | Select-Object -First 1
+          }
           Remove-Item cef_binary -Recurse -Force -ErrorAction SilentlyContinue
           Move-Item $dir.FullName cef_binary -Force
           Write-Host "CEF extracted to ./cef_binary"
+          Write-Host "--- cef_binary 顶层目录 ---"
+          Get-ChildItem cef_binary | Format-Table Name, Mode
+          if (Test-Path cef_binary/libcef_dll) { Write-Host "wrapper 源码目录: libcef_dll" }
+          elseif (Test-Path cef_binary/libcef_dll_wrapper) { Write-Host "wrapper 源码目录: libcef_dll_wrapper" }
+          else { Write-Host "WARNING: 未找到 libcef_dll 或 libcef_dll_wrapper" }
 
       # Configure + Build with Ninja and the MSVC toolchain.
       # We locate the MSVC environment via vswhere (no dependency on the
