@@ -1,11 +1,16 @@
-# 便捷封装：真正编译走 CMake。Windows 下需有 Visual Studio 2022 + CMake + GNU Make。
-# 主要用法：
-#   make cef      # 下载并解压 CEF 二进制到 ./cef_binary
-#   make         # 配置并 Release 编译
-#   make clean   # 清理
-# 也可以完全不用本 Makefile，直接：
-#   cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCEF_DIR=<cef路径>
-#   cmake --build build --config Release
+# 便捷封装：真正编译走 CMake。
+# 推荐用 Ninja + MSVC（不依赖 “Visual Studio” CMake 生成器，最稳）：
+#   1) 打开 “x64 Native Tools Command Prompt for VS 2022”（保证 cl.exe / Ninja 在 PATH）
+#   2) make cef      # 下载并解压 CEF 二进制到 ./cef_binary
+#   3) make         # 配置(Release)并编译
+#   4) make clean   # 清理
+#
+# 也可以完全不用本 Makefile，直接在 VS 的 x64 Native Tools 命令行里：
+#   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCEF_DIR=cef_binary
+#   cmake --build build
+# （若你确实装好了 “Visual Studio 17 2022 + 使用C++的桌面开发” 工作负荷，也可改用
+#   cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCEF_DIR=cef_binary
+#   cmake --build build --config Release）
 
 CEF_VERSION  ?= 151.3.15
 CEF_HASH     ?= g57a32ea
@@ -24,9 +29,9 @@ cef:
 	@echo "CEF extracted to ./cef_binary"
 
 build:
-	cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCEF_DIR="$(CEF_DIR)"
-	cmake --build build --config Release
+	cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCEF_DIR="$(CEF_DIR)"
+	cmake --build build
 
 clean:
-	cmake --build build --config Release --target clean
+	cmake --build build --target clean
 	-rm -rf build
