@@ -6,29 +6,6 @@
 #include "include/wrapper/cef_helpers.h"
 #include "simple_handler.h"
 
-namespace {
-
-// 把 local:// 请求交给 CefResourceManager 处理。
-class LocalSchemeHandlerFactory : public CefSchemeHandlerFactory {
- public:
-  explicit LocalSchemeHandlerFactory(CefRefPtr<CefResourceManager> rm)
-      : rm_(rm) {}
-
-  CefRefPtr<CefResourceHandler> Create(CefRefPtr<CefBrowser> browser,
-                                       CefRefPtr<CefFrame> frame,
-                                       const CefString& scheme_name,
-                                       CefRefPtr<CefRequest> request) override {
-    CEF_REQUIRE_IO_THREAD();
-    return rm_->CreateHandler(request);
-  }
-
- private:
-  CefRefPtr<CefResourceManager> rm_;
-  IMPLEMENT_REFCOUNTING(LocalSchemeHandlerFactory);
-};
-
-}  // namespace
-
 SimpleApp::SimpleApp(const std::string& exe_dir) : exe_dir_(exe_dir) {}
 
 SimpleApp::~SimpleApp() {}
@@ -48,19 +25,16 @@ void SimpleApp::OnContextInitialized() {
   resource_manager_ = new CefResourceManager();
 
   // 把 local:// 请求的 URL 路径映射到 <exe_dir>/www 目录。
-  // URL "local://app/index.html" 解析为 host=app, path=/index.html；
-  // DirectoryProvider 只匹配 path（不含 host），故 url_path 用 "/" 即可：
-  //   /index.html   -> www/index.html
-  //   /style.css    -> www/style.css
-  //   /app.js       -> www/app.js
+  // URL "local://app/index.html" 解析为 origin=local://app, path=/index.html。
+  // 新版 AddDirectoryProvider 的 url_path 需包含 origin（而非旧版的纯 path 前缀
+  // "/"），并使用 order + identifier 两个整/字符串参数代替旧 HandlerOptions：
+  //   local://app/index.html   -> www/index.html
+  //   local://app/style.css    -> www/style.css
+  //   local://app/app.js       -> www/app.js
   std::string www_dir = exe_dir_ + "/www";
-  CefResourceManager::HandlerOptions options;
-  resource_manager_->AddDirectoryProvider("/", www_dir, 0, options);
+  resource_manager_->AddDirectoryProvider("local://app", www_dir, 0, "");
 
-  CefRegisterSchemeHandlerFactory(
-      "local", "", new LocalSchemeHandlerFactory(resource_manager_));
-
-  CefRefPtr<CefClient> client(new SimpleHandler());
+  CefRefPtr<SimpleHandler> client(new SimpleHandler(resource_manager_));
   CefBrowserSettings browser_settings;
 
   CefWindowInfo window_info;
