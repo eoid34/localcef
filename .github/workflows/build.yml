@@ -1,49 +1,53 @@
-
-name: Build CEF App
+name: Build CEF Local Scheme EXE
 
 on:
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'Build type (Debug/Release)'
-        required: true
-        default: 'Release'
-        type: choice
-        options:
-          - Debug
-          - Release
+      cef_version:
+        description: "CEF version (e.g. 151.3.15)"
+        required: false
+        default: "151.3.15"
+      cef_hash:
+        description: "CEF build hash (e.g. g57a32ea)"
+        required: false
+        default: "g57a32ea"
+      cef_chromium:
+        description: "Chromium version (e.g. 151.0.7922.76)"
+        required: false
+        default: "151.0.7922.76"
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup CMake
-      uses: jwlawson/actions-setup-cmake@v1
-      with:
-        cmake-version: '3.20.x'
+      - name: Download CEF binary
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.cef_version }}"
+          $hash = "${{ github.event.inputs.cef_hash }}"
+          $chromium = "${{ github.event.inputs.cef_chromium }}"
+          $url = "https://cef-builds.spotifycdn.com/cef_binary_${ver}%2B${hash}%2Bchromium-${chromium}_windows64.tar.bz2"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile cef.tar.bz2
+          tar -xf cef.tar.bz2
+          $dir = Get-ChildItem -Directory cef_binary_* | Select-Object -First 1
+          Remove-Item cef_binary -Recurse -Force -ErrorAction SilentlyContinue
+          Move-Item $dir.FullName cef_binary -Force
+          Write-Host "CEF extracted to ./cef_binary"
 
-    - name: Download CEF
-      run: |
-        # 下载CEF二进制文件 (示例版本，实际需根据需求调整)
-        Invoke-WebRequest -Uri "https://cef-builds.spotifycdn.com/cef_binary_109.1.11+g51392e7+chromium-109.0.5414.119_windows64_minimal.tar.bz2" -OutFile "cef.tar.bz2"
-        # 解压 (需要tar命令，Windows最新 runner 支持)
-        tar -xjf cef.tar.bz2
-        Rename-Item -Path "cef_binary_109.1.11+g51392e7+chromium-109.0.5414.119_windows64_minimal" -NewName "cef_binary"
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCEF_DIR="${{ github.workspace }}/cef_binary"
 
-    - name: Configure CMake
-      run: |
-        cmake -B build -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_type }} -DCEF_ROOT="${{ github.workspace }}/cef_binary"
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release
 
-    - name: Build
-      run: |
-        cmake --build build --config ${{ github.event.inputs.build_type }}
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: CefLocalSchemeApp-${{ github.event.inputs.build_type }}
-        path: build/${{ github.event.inputs.build_type }}/*
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cef-local-scheme-exe
+          path: build/Release
