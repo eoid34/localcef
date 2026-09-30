@@ -38,16 +38,20 @@ jobs:
           Move-Item $dir.FullName cef_binary -Force
           Write-Host "CEF extracted to ./cef_binary"
 
-      - name: Configure
-        shell: bash
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCEF_DIR="${{ github.workspace }}/cef_binary"
-
-      - name: Build
-        shell: bash
-        run: cmake --build build --config Release
+      # Configure + Build with Ninja and the MSVC toolchain.
+      # We locate the MSVC environment via vswhere (no dependency on the
+      # "Visual Studio 17 2022" CMake generator, which may be unavailable).
+      - name: Configure and Build
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+            call "%%i\VC\Auxiliary\Build\vcvars64.bat"
+          )
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCEF_DIR="${{ github.workspace }}\cef_binary"
+          cmake --build build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cef-local-scheme-exe
-          path: build/Release
+          path: build/
