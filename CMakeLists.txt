@@ -64,13 +64,15 @@ message(STATUS "Found ${CEF_WRAPPER_COUNT} CEF wrapper source files")
 
 add_library(libcef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
 # NOMINMAX：屏蔽 Windows 头文件的 min/max 宏，避免与 CEF/STL 冲突（CEF 官方示例同样要求）。
-# BUILDING_CEF_SHARED：CEF 封装层源码（cpptoc/ctocpp）有
+# WRAPPING_CEF_SHARED（封装层/wrapper 侧宏）：CEF 封装层源码（cpptoc/ctocpp）有守卫
 #   "#if !defined(WRAPPING_CEF_SHARED) #error This file can be included wrapper-side only"
-# 的守卫；WRAPPING_CEF_SHARED 由 BUILDING_CEF_SHARED 经 cef_config.h 推导而来。必须定义，
-# 否则 213 个封装源文件会全部因该 #error 编译失败。同时它驱动 CEF_EXPORT 的 dllexport 设置。
-# 注意：该宏必须是 PRIVATE，绝不能泄漏到 EXE（EXE 侧应使用 USING_CEF_SHARED）。
+# 必须定义，否则这些源文件全部 #error。
+# ⚠️ 绝不能定义 BUILDING_CEF_SHARED —— 那是"核心 DLL（libcef.dll）侧"宏，
+# include/capi/*.h 有守卫 "#if defined(BUILDING_CEF_SHARED) #error ...DLL-side"，
+# 一旦定义会让封装层在包含 capi 头时直接 #error。BUILDING_CEF_SHARED 与 WRAPPING_CEF_SHARED 互斥。
+# 该宏 PRIVATE，不泄漏到 EXE（EXE 侧应使用 USING_CEF_SHARED）。
 target_compile_definitions(libcef_dll_wrapper PUBLIC UNICODE _UNICODE NOMINMAX
-  PRIVATE BUILDING_CEF_SHARED WRAPPING_CEF_SHARED)
+  PRIVATE WRAPPING_CEF_SHARED)
 # 把 CEF 发行版根目录也加入包含路径：wrapper 内部可能用 "include/..." 或 "libcef_dll/..." 形式包含。
 target_include_directories(libcef_dll_wrapper PUBLIC
   "${CEF_DIR}"
