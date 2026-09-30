@@ -2,7 +2,7 @@
 
 #include "include/cef_browser.h"
 #include "include/cef_scheme.h"
-#include "include/cef_win.h"
+#include "include/internal/cef_win.h"
 #include "include/wrapper/cef_helpers.h"
 #include "simple_handler.h"
 
@@ -34,7 +34,7 @@ SimpleApp::SimpleApp(const std::string& exe_dir) : exe_dir_(exe_dir) {}
 SimpleApp::~SimpleApp() {}
 
 void SimpleApp::OnRegisterCustomSchemes(
-    CefRefPtr<CefSchemeRegistrar> registrar) {
+    CefRawPtr<CefSchemeRegistrar> registrar) {
   registrar->AddCustomScheme(
       "local",
       CEF_SCHEME_OPTION_STANDARD | CEF_SCHEME_OPTION_LOCAL |

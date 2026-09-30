@@ -17,7 +17,7 @@ class SimpleApp : public CefApp, public CefBrowserProcessHandler {
   }
 
   void OnRegisterCustomSchemes(
-      CefRefPtr<CefSchemeRegistrar> registrar) override;
+      CefRawPtr<CefSchemeRegistrar> registrar) override;
   void OnContextInitialized() override;
 
  private:
