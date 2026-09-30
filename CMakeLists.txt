@@ -1,8 +1,17 @@
 cmake_minimum_required(VERSION 3.21)
 project(cef_local_scheme CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# CEF 151（基于 Chromium 151）的封装层源码及其 include/base 头文件使用了 C++20 特性
+# （concepts / requires 子句 / std::remove_cvref_t / std::erase_if）。用 C++17 编译会直接报
+# C2061/C3646 等语法错误，必须按 C++20 编译。
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# /Zc:__cplusplus : 让 __cplusplus 宏如实反映标准版本（MSVC 默认会谎报成 199711L）。
+# /permissive-    : 启用标准一致性（Chromium/CEF 代码依赖严格的两阶段查找等语义）。
+if(MSVC)
+  add_compile_options(/Zc:__cplusplus /permissive-)
+endif()
 
 # ---- CEF 二进制发行版位置 ----
 # 优先用 -DCEF_DIR=... 传入；其次用环境变量 CEF_DIR；再退回到 ./cef_binary。
