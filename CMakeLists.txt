@@ -13,6 +13,10 @@ if(NOT DEFINED CEF_DIR)
     set(CEF_DIR "${CMAKE_SOURCE_DIR}/cef_binary")
   endif()
 endif()
+
+# Normalize to forward slashes: CMake's file(GLOB) treats backslashes in the
+# pattern as escape characters, which breaks path matching on Windows.
+string(REPLACE "\\" "/" CEF_DIR "${CEF_DIR}")
 message(STATUS "Using CEF_DIR = ${CEF_DIR}")
 
 set(CEF_INCLUDE "${CEF_DIR}/include")
@@ -21,7 +25,15 @@ set(CEF_RESOURCES_SRC "${CEF_DIR}/Resources")
 set(CEF_RUNTIME_SRC_RELEASE "${CEF_DIR}/Release")
 
 # ---- 直接编译 CEF C++ 封装层为静态库 ----
-file(GLOB CEF_WRAPPER_SOURCES "${CEF_DIR}/libcef_dll_wrapper/*.cc")
+# 注意：必须用正斜杠，CMake 的 file(GLOB) 会把反斜杠当转义符。
+file(GLOB CEF_WRAPPER_SOURCES
+  "${CEF_DIR}/libcef_dll_wrapper/*.cc"
+  "${CEF_DIR}/libcef_dll_wrapper/*.cpp")
+if(NOT CEF_WRAPPER_SOURCES)
+  message(FATAL_ERROR
+    "未在 ${CEF_DIR}/libcef_dll_wrapper 下找到任何 .cc/.cpp 源文件。"
+    "请确认 CEF 二进制包已正确解压（Standard 发行版应包含该目录的源码）。")
+endif()
 add_library(libcef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
 target_compile_definitions(libcef_dll_wrapper PUBLIC UNICODE _UNICODE)
 target_include_directories(libcef_dll_wrapper PUBLIC
