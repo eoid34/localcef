@@ -1,36 +1,83 @@
-
-cmake_minimum_required(VERSION 3.15)
-project(CefLocalSchemeApp)
+cmake_minimum_required(VERSION 3.21)
+project(cef_local_scheme CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 查找CEF包，假设CEF_ROOT环境变量已设置或手动指定
-# 在实际CI环境中，通常需要先下载并解压CEF到指定目录
-if(NOT DEFINED CEF_ROOT)
-    set(CEF_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/cef_binary")
+# ---- CEF 二进制发行版位置 ----
+# 优先用 -DCEF_DIR=... 传入；其次用环境变量 CEF_DIR；再退回到 ./cef_binary。
+if(NOT DEFINED CEF_DIR)
+  if(DEFINED ENV{CEF_DIR})
+    set(CEF_DIR $ENV{CEF_DIR})
+  else()
+    set(CEF_DIR "${CMAKE_SOURCE_DIR}/cef_binary")
+  endif()
 endif()
+message(STATUS "Using CEF_DIR = ${CEF_DIR}")
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CEF_ROOT}/cmake")
-find_package(CEF REQUIRED)
+set(CEF_INCLUDE "${CEF_DIR}/include")
+set(CEF_LIB_RELEASE "${CEF_DIR}/Release/libcef.lib")
+set(CEF_RESOURCES_SRC "${CEF_DIR}/Resources")
+set(CEF_RUNTIME_SRC_RELEASE "${CEF_DIR}/Release")
 
-# 添加可执行文件
-add_executable(${PROJECT_NAME}
-    src/main.cpp
-    src/app.cpp
-    src/scheme_handler.cpp
-)
+# ---- 直接编译 CEF C++ 封装层为静态库 ----
+file(GLOB CEF_WRAPPER_SOURCES "${CEF_DIR}/libcef_dll_wrapper/*.cc")
+add_library(libcef_dll_wrapper STATIC ${CEF_WRAPPER_SOURCES})
+target_compile_definitions(libcef_dll_wrapper PUBLIC UNICODE _UNICODE)
+target_include_directories(libcef_dll_wrapper PUBLIC
+  "${CEF_INCLUDE}"
+  "${CEF_INCLUDE}/wrapper"
+  "${CEF_DIR}/libcef_dll_wrapper")
 
-# 链接CEF库
-target_link_libraries(${PROJECT_NAME} libcef_dll_wrapper ${CEF_STANDARD_LIBS})
+# ---- 我们的 EXE ----
+add_executable(cef_local_scheme WIN32
+  src/main.cc
+  src/simple_app.cc
+  src/simple_handler.cc)
+target_include_directories(cef_local_scheme PRIVATE
+  "${CEF_INCLUDE}"
+  "${CEF_INCLUDE}/wrapper"
+  "${CEF_DIR}/libcef_dll_wrapper")
+target_link_libraries(cef_local_scheme
+  libcef_dll_wrapper
+  "${CEF_LIB_RELEASE}")
 
-# 包含头文件
-target_include_directories(${PROJECT_NAME} PRIVATE ${CEF_INCLUDE_DIRS} src)
+# ---- 构建后复制运行时文件到 EXE 同目录 ----
+set(OUT "$<TARGET_FILE_DIR:cef_local_scheme>")
 
-# 复制CEF资源文件到输出目录
-PRINT_CEF_CONFIG()
-COPY_CEF_RESOURCES(${PROJECT_NAME})
+# DLL / bin / pak / dat（来自 Release）
+file(GLOB CEF_RUNTIME_FILES
+  "${CEF_RUNTIME_SRC_RELEASE}/*.dll"
+  "${CEF_RUNTIME_SRC_RELEASE}/*.bin"
+  "${CEF_RUNTIME_SRC_RELEASE}/*.pak"
+  "${CEF_RUNTIME_SRC_RELEASE}/*.dat")
+foreach(f ${CEF_RUNTIME_FILES})
+  add_custom_command(TARGET cef_local_scheme POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${f}" "${OUT}")
+endforeach()
 
-# 创建www目录和index.html用于测试
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/www)
-file(WRITE ${CMAKE_BINARY_DIR}/www/index.html "<html><body><h1>Hello from local:// scheme!</h1></body></html>")
+# 语言包（来自 Release/locales 或 Resources/locales）
+file(GLOB CEF_LOCALES_RELEASE "${CEF_RUNTIME_SRC_RELEASE}/locales/*.pak")
+foreach(f ${CEF_LOCALES_RELEASE})
+  add_custom_command(TARGET cef_local_scheme POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OUT}/locales"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${f}" "${OUT}/locales")
+endforeach()
+
+file(GLOB CEF_LOCALES_RES "${CEF_RESOURCES_SRC}/locales/*.pak")
+foreach(f ${CEF_LOCALES_RES})
+  add_custom_command(TARGET cef_local_scheme POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${OUT}/locales"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${f}" "${OUT}/locales")
+endforeach()
+
+# 资源包（来自 Resources）
+file(GLOB CEF_RES_FILES "${CEF_RESOURCES_SRC}/*.pak" "${CEF_RESOURCES_SRC}/*.dat")
+foreach(f ${CEF_RES_FILES})
+  add_custom_command(TARGET cef_local_scheme POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${f}" "${OUT}")
+endforeach()
+
+# 我们自己的 www 目录
+add_custom_command(TARGET cef_local_scheme POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/www" "${OUT}/www")
