@@ -38,10 +38,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   settings.no_sandbox = true;
   settings.multi_threaded_message_loop = false;
 
-  // 用户数据目录：<exe_dir>/data/user-data（等价于 --user-data-dir="data\user-data"）
-  std::string user_data = exe_dir + "/data/user-data";
-  CefString(&settings.user_data_path).FromASCII(user_data.c_str());
-
   // 运行时资源/语言包位于 exe 同目录。
   CefString(&settings.resources_dir_path).FromASCII(exe_dir.c_str());
   CefString(&settings.locales_dir_path).FromASCII((exe_dir + "/locales").c_str());
